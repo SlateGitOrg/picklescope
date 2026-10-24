@@ -228,6 +228,16 @@ def test_onnx_external_symlink_escape(tmp_path: Path) -> None:
     assert "symlink" in ctx.findings[0].message
 
 
+def test_onnx_external_symlink_loop(tmp_path: Path) -> None:
+    os.symlink("loop_b", tmp_path / "loop_a")
+    os.symlink("loop_a", tmp_path / "loop_b")
+    model = onnx_model(onnx_tensor("w", [2], external={"location": "loop_a/w.bin"}))
+    ctx = make_ctx()
+    onnx_scan.scan_onnx(model, LOC, ctx, tmp_path)
+    assert rules_of(ctx) == {"OX502"}
+    assert "cannot be resolved" in ctx.findings[0].message
+
+
 @pytest.mark.parametrize(
     ("external", "rule"),
     [

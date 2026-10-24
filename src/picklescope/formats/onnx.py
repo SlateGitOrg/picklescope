@@ -271,7 +271,17 @@ def _check_external(
     if base_dir is None:
         return
     root = Path(base_dir).resolve()
-    target = (root / ref.location).resolve()
+    try:
+        target = (root / ref.location).resolve()
+    except (OSError, RuntimeError) as exc:  # RuntimeError: symlink loop (Python 3.12)
+        ctx.emit(
+            "OX502",
+            here,
+            f"tensor {tensor!r} external location {ref.location!r} cannot be resolved: {exc}",
+            tensor=tensor,
+            external_location=ref.location,
+        )
+        return
     if not target.is_relative_to(root):
         ctx.emit(
             "OX502",
