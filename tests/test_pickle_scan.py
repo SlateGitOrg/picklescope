@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from conftest import LOC, make_ctx, rules_of
-from fixturegen import PickleAsm, benign_pickle, legacy_torch_file, print_pickle
-
 from picklescope.findings import Severity
 from picklescope.limits import ScanLimits
 from picklescope.pkl.scan import scan_pickle
+
+from conftest import LOC, make_ctx, rules_of
+from fixturegen import PickleAsm, benign_pickle, legacy_torch_file, print_pickle
 
 
 def test_findings_carry_offsets_and_details() -> None:
@@ -92,7 +92,7 @@ def test_nesting_limit_stops_recursion() -> None:
     deep = make_ctx(ScanLimits(max_nesting=10))
     scan_pickle(inner, LOC, deep, "plain")
     assert "PKL102" in rules_of(deep)
-    nested = [f for f in deep.findings if f.rule_id == "PKL102"][0]
+    nested = next(f for f in deep.findings if f.rule_id == "PKL102")
     assert len(nested.location.members) == 6
 
 

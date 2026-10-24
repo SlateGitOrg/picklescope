@@ -42,9 +42,13 @@ def _compare(data: bytes) -> None:
 
 
 scalars = (
-    st.none() | st.booleans() | st.integers() | st.floats(allow_nan=True)
-    | st.text(max_size=40) | st.binary(max_size=300)
-)  # fmt: skip
+    st.none()
+    | st.booleans()
+    | st.integers()
+    | st.floats(allow_nan=True)
+    | st.text(max_size=40)
+    | st.binary(max_size=300)
+)
 values = st.recursive(
     scalars,
     lambda children: (

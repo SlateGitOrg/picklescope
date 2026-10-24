@@ -21,8 +21,7 @@ def fixtures() -> Path:
 
 
 def make_ctx(limits: ScanLimits | None = None, **kwargs: object) -> ScanContext:
-    return ScanContext(default_policy(), limits or ScanLimits(), dispatch=_scan_nested,
-                       **kwargs)  # type: ignore[arg-type]
+    return ScanContext(default_policy(), limits or ScanLimits(), dispatch=_scan_nested, **kwargs)  # type: ignore[arg-type]
 
 
 def rules_of(report_or_ctx: FileReport | ScanContext) -> set[str]:

@@ -6,13 +6,14 @@ import json
 from pathlib import Path
 
 import pytest
-from conftest import FIXTURES, rules_of, scan_fixture
 
-import fixturegen
 from picklescope.findings import Severity
 from picklescope.pkl.analyzer import analyze_pickle
 from picklescope.pkl.disasm import looks_like_pickle
 from picklescope.policy import load_policy
+
+import fixturegen
+from conftest import FIXTURES, rules_of, scan_fixture
 
 # fixture path -> exact set of rule ids expected under the default policy
 EXPECTED: dict[str, set[str]] = {
@@ -120,8 +121,11 @@ def test_fixture_findings_match_golden(rel: str) -> None:
 
 @pytest.mark.parametrize(
     "rel",
-    sorted(k for k, v in json.loads((FIXTURES / "catalogue.json").read_text()).items()
-           if v["malicious_pattern"]),
+    sorted(
+        k
+        for k, v in json.loads((FIXTURES / "catalogue.json").read_text()).items()
+        if v["malicious_pattern"]
+    ),
 )
 def test_malicious_patterns_are_high_or_worse(rel: str) -> None:
     report = scan_fixture(rel)

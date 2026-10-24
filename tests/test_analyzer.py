@@ -5,7 +5,6 @@ from __future__ import annotations
 import pickle
 
 import pytest
-from fixturegen import PickleAsm, print_pickle
 
 from picklescope.limits import ScanLimits
 from picklescope.pkl.analyzer import (
@@ -21,6 +20,8 @@ from picklescope.pkl.analyzer import (
     describe,
     describe_args,
 )
+
+from fixturegen import PickleAsm, print_pickle
 
 
 def test_records_import_and_call_with_arguments() -> None:
@@ -44,9 +45,18 @@ def test_benign_pickle_has_no_calls_to_unknowns() -> None:
 
 def test_memo_routes_stack_global_operands() -> None:
     data = (
-        PickleAsm(4).unicode("builtins").memoize().unicode("len").memoize()
-        .op(b"0").op(b"0").binget(0).binget(1).op(b"\x93").stop()
-    )  # fmt: skip
+        PickleAsm(4)
+        .unicode("builtins")
+        .memoize()
+        .unicode("len")
+        .memoize()
+        .op(b"0")
+        .op(b"0")
+        .binget(0)
+        .binget(1)
+        .op(b"\x93")
+        .stop()
+    )
     analysis = analyze_pickle(data)
     assert [(e.module, e.name) for e in analysis.imports] == [("builtins", "len")]
 
@@ -74,19 +84,33 @@ def test_inst_and_obj_calls() -> None:
 
 def test_newobj_and_newobj_ex() -> None:
     data = (
-        PickleAsm(4).stack_global("textwrap", "TextWrapper").empty_tuple().op(b"\x81")
-        .op(b"0").stack_global("textwrap", "TextWrapper").empty_tuple().empty_dict()
-        .newobj_ex().stop()
-    )  # fmt: skip
+        PickleAsm(4)
+        .stack_global("textwrap", "TextWrapper")
+        .empty_tuple()
+        .op(b"\x81")
+        .op(b"0")
+        .stack_global("textwrap", "TextWrapper")
+        .empty_tuple()
+        .empty_dict()
+        .newobj_ex()
+        .stop()
+    )
     analysis = analyze_pickle(data)
     assert [c.opcode for c in analysis.calls] == ["NEWOBJ", "NEWOBJ_EX"]
 
 
 def test_mutations_on_globals_only() -> None:
     data = (
-        PickleAsm(2).global_("collections", "OrderedDict").empty_list().op(b"a")
-        .op(b"0").empty_list().int1(1).op(b"a").stop()
-    )  # fmt: skip
+        PickleAsm(2)
+        .global_("collections", "OrderedDict")
+        .empty_list()
+        .op(b"a")
+        .op(b"0")
+        .empty_list()
+        .int1(1)
+        .op(b"a")
+        .stop()
+    )
     analysis = analyze_pickle(data)
     assert [m.opcode for m in analysis.mutations] == ["APPEND"]
 

@@ -101,8 +101,9 @@ class PickleAsm:
 
     def long1(self, value: int) -> PickleAsm:
         length = (value.bit_length() + 8) // 8
-        return self.op(b"\x8a", struct.pack("<B", length) + value.to_bytes(length, "little",
-                                                                            signed=True))
+        return self.op(
+            b"\x8a", struct.pack("<B", length) + value.to_bytes(length, "little", signed=True)
+        )
 
     # structure
     def mark(self) -> PickleAsm:
@@ -233,7 +234,7 @@ def _zip(entries: Iterable[tuple[str, bytes] | tuple[str, bytes, dict[str, Any]]
         warnings.simplefilter("ignore", UserWarning)  # duplicate names are deliberate
         for entry in entries:
             name, data = entry[0], entry[1]
-            opts: dict[str, Any] = entry[2] if len(entry) == 3 else {}  # type: ignore[misc]
+            opts: dict[str, Any] = entry[2] if len(entry) == 3 else {}
             info = zipfile.ZipInfo(name, date_time=ZIP_DATE)
             info.create_system = 3
             info.external_attr = opts.get("mode", 0o100644) << 16
@@ -340,8 +341,9 @@ def gguf(spec: GGUFSpec) -> bytes:
     wide = spec.version >= 2
     count = "Q" if wide else "I"
     out = bytearray(b"GGUF" + struct.pack(e + "I", spec.version))
-    out += struct.pack(e + count, len(spec.tensors) if spec.tensor_count is None
-                       else spec.tensor_count)  # fmt: skip
+    out += struct.pack(
+        e + count, len(spec.tensors) if spec.tensor_count is None else spec.tensor_count
+    )
     out += struct.pack(e + count, len(spec.kv) if spec.kv_count is None else spec.kv_count)
     for key, vtype, value in spec.kv:
         out += _gguf_str(key, e, wide) + struct.pack(e + "I", vtype)
@@ -439,7 +441,9 @@ def onnx_model(initializer: bytes, op_type: str = "Add", domain: str = "") -> by
 # --------------------------------------------------------------------------- keras
 
 
-def keras_ref(module: str, class_name: str, config: Any, registered: str | None = None) -> dict[str, Any]:
+def keras_ref(
+    module: str, class_name: str, config: Any, registered: str | None = None
+) -> dict[str, Any]:
     return {"module": module, "class_name": class_name, "config": config,
             "registered_name": registered}  # fmt: skip
 
@@ -450,8 +454,7 @@ def keras_sequential(*layers: dict[str, Any]) -> dict[str, Any]:
 
 
 def dense(activation: Any = "relu", name: str = "dense") -> dict[str, Any]:
-    return keras_ref("keras.layers", "Dense", {"name": name, "units": 2,
-                                               "activation": activation})  # fmt: skip
+    return keras_ref("keras.layers", "Dense", {"name": name, "units": 2, "activation": activation})
 
 
 LAMBDA_CODE = "bGFtYmRhIHg6IHgK"  # base64 of the text "lambda x: x" - placeholder, not bytecode
@@ -467,8 +470,9 @@ def keras_archive(config: dict[str, Any] | bytes) -> bytes:
     raw = config if isinstance(config, bytes) else json.dumps(config, indent=1).encode()
     metadata = json.dumps({"keras_version": "3.6.0", "date_saved": "2020-01-01@00:00:00"})
     weights = b"\x89HDF\r\n\x1a\n" + b"\x00" * 56
-    return _zip([("metadata.json", metadata.encode()), ("config.json", raw),
-                 ("model.weights.h5", weights)])  # fmt: skip
+    return _zip(
+        [("metadata.json", metadata.encode()), ("config.json", raw), ("model.weights.h5", weights)]
+    )
 
 
 def legacy_h5(config: dict[str, Any]) -> bytes:
@@ -494,269 +498,586 @@ class Fixture:
 def _fixtures() -> list[Fixture]:
     f = Fixture
     p4 = PickleAsm
-    items = [
+    return [
         # ---- plain pickles
         f("pickle/benign_ordereddict_p2.pkl", benign_pickle, "allow-listed OrderedDict"),
-        f("pickle/benign_text_p0.pkl",
-          lambda: b"(dp0\nVkey\np1\nI42\nsVname\np2\nVfixture\np3\ns.",
-          "protocol-0 dict of constants"),
+        f(
+            "pickle/benign_text_p0.pkl",
+            lambda: b"(dp0\nVkey\np1\nI42\nsVname\np2\nVfixture\np3\ns.",
+            "protocol-0 dict of constants",
+        ),
         f("pickle/call_print.pkl", print_pickle, "invokes builtins.print", True),
-        f("pickle/import_only_dedent.pkl",
-          lambda: p4(2).global_("textwrap", "dedent").stop(),
-          "imports textwrap.dedent without calling it"),
-        f("pickle/getattr_gadget.pkl",
-          lambda: p4(2).global_("builtins", "getattr").global_("builtins", "str")
-          .unicode("upper").tuple2().reduce().unicode("abc").tuple1().reduce().stop(),
-          "getattr(str, 'upper')('abc'): deny-listed gadget plus indirect call", True),
-        f("pickle/stack_global_memo.pkl",
-          lambda: p4(4).unicode("builtins").memoize().unicode("print").memoize()
-          .op(b"0").op(b"0").binget(0).binget(1).op(b"\x93").unicode("memo route")
-          .tuple1().reduce().stop(),
-          "STACK_GLOBAL operands fetched from the memo", True),
-        f("pickle/dynamic_stack_global.pkl",
-          lambda: p4(4).unicode("builtins").global_("builtins", "str").unicode("len")
-          .tuple1().reduce().op(b"\x93").stop(),
-          "STACK_GLOBAL name computed by a call", True),
-        f("pickle/dunder_traversal.pkl",
-          lambda: p4(4).stack_global("colorsys", "rgb_to_hsv.__code__").stop(),
-          "dotted name walking through __code__", True),
-        f("pickle/ext_opcode.pkl", lambda: p4(2).ext1(1).stop(),
-          "EXT1 extension-registry import", True),
-        f("pickle/global_mutation.pkl",
-          lambda: p4(2).global_("collections", "OrderedDict").empty_dict()
-          .unicode("fixture_marker").int1(1).setitem().build().stop(),
-          "BUILD applied to an imported class", True),
-        f("pickle/persistent_id.pkl",
-          lambda: p4(2).unicode("fixture").int1(1).tuple2().binpersid().stop(),
-          "persistent id outside a torch archive"),
-        f("pickle/nested_pickle.pkl",
-          lambda: p4(4).binbytes(print_pickle("nested hello")).stop(),
-          "bytes constant that is itself a print pickle", True),
-        f("pickle/two_pickles.pkl", lambda: benign_pickle() + print_pickle(),
-          "benign pickle followed by a second pickle", True),
-        f("pickle/trailing_data.pkl", lambda: benign_pickle() + b"trailing bytes\n",
-          "non-pickle bytes after STOP"),
+        f(
+            "pickle/import_only_dedent.pkl",
+            lambda: p4(2).global_("textwrap", "dedent").stop(),
+            "imports textwrap.dedent without calling it",
+        ),
+        f(
+            "pickle/getattr_gadget.pkl",
+            lambda: (
+                p4(2)
+                .global_("builtins", "getattr")
+                .global_("builtins", "str")
+                .unicode("upper")
+                .tuple2()
+                .reduce()
+                .unicode("abc")
+                .tuple1()
+                .reduce()
+                .stop()
+            ),
+            "getattr(str, 'upper')('abc'): deny-listed gadget plus indirect call",
+            True,
+        ),
+        f(
+            "pickle/stack_global_memo.pkl",
+            lambda: (
+                p4(4)
+                .unicode("builtins")
+                .memoize()
+                .unicode("print")
+                .memoize()
+                .op(b"0")
+                .op(b"0")
+                .binget(0)
+                .binget(1)
+                .op(b"\x93")
+                .unicode("memo route")
+                .tuple1()
+                .reduce()
+                .stop()
+            ),
+            "STACK_GLOBAL operands fetched from the memo",
+            True,
+        ),
+        f(
+            "pickle/dynamic_stack_global.pkl",
+            lambda: (
+                p4(4)
+                .unicode("builtins")
+                .global_("builtins", "str")
+                .unicode("len")
+                .tuple1()
+                .reduce()
+                .op(b"\x93")
+                .stop()
+            ),
+            "STACK_GLOBAL name computed by a call",
+            True,
+        ),
+        f(
+            "pickle/dunder_traversal.pkl",
+            lambda: p4(4).stack_global("colorsys", "rgb_to_hsv.__code__").stop(),
+            "dotted name walking through __code__",
+            True,
+        ),
+        f(
+            "pickle/ext_opcode.pkl",
+            lambda: p4(2).ext1(1).stop(),
+            "EXT1 extension-registry import",
+            True,
+        ),
+        f(
+            "pickle/global_mutation.pkl",
+            lambda: (
+                p4(2)
+                .global_("collections", "OrderedDict")
+                .empty_dict()
+                .unicode("fixture_marker")
+                .int1(1)
+                .setitem()
+                .build()
+                .stop()
+            ),
+            "BUILD applied to an imported class",
+            True,
+        ),
+        f(
+            "pickle/persistent_id.pkl",
+            lambda: p4(2).unicode("fixture").int1(1).tuple2().binpersid().stop(),
+            "persistent id outside a torch archive",
+        ),
+        f(
+            "pickle/nested_pickle.pkl",
+            lambda: p4(4).binbytes(print_pickle("nested hello")).stop(),
+            "bytes constant that is itself a print pickle",
+            True,
+        ),
+        f(
+            "pickle/two_pickles.pkl",
+            lambda: benign_pickle() + print_pickle(),
+            "benign pickle followed by a second pickle",
+            True,
+        ),
+        f(
+            "pickle/trailing_data.pkl",
+            lambda: benign_pickle() + b"trailing bytes\n",
+            "non-pickle bytes after STOP",
+        ),
         f("pickle/truncated.pkl", lambda: print_pickle()[:-6], "stream cut short"),
         f("pickle/unknown_opcode.pkl", lambda: p4(2).op(b"\xff").stop(), "opcode 0xff", True),
         f("pickle/protocol_9.pkl", lambda: p4(9).none().stop(), "PROTO 9", True),
-        f("pickle/malformed_name.pkl",
-          lambda: p4(2).global_("builtins", "print len").stop(),
-          "global name containing a space", True),
-        f("pickle/inst_p0.pkl",
-          lambda: b"(F0.1\nF0.2\nF0.3\nicolorsys\nrgb_to_hsv\np0\n.",
-          "protocol-0 INST calling colorsys.rgb_to_hsv", True),
-        f("pickle/obj_p1.pkl",
-          lambda: p4().mark().global_("textwrap", "TextWrapper").obj().stop(),
-          "protocol-1 OBJ instantiating textwrap.TextWrapper", True),
-        f("pickle/newobj_ex_p4.pkl",
-          lambda: p4(4).stack_global("textwrap", "TextWrapper").empty_tuple().empty_dict()
-          .newobj_ex().stop(),
-          "NEWOBJ_EX instantiating textwrap.TextWrapper", True),
-        f("pickle/py2_builtin_getattr.pkl",
-          lambda: p4(2).global_("__builtin__", "getattr").stop(),
-          "Python-2 spelling of builtins.getattr", True),
-        f("pickle/colorsys_call.pkl",
-          lambda: p4(2).global_("colorsys", "rgb_to_hsv").float(0.5).float(0.5).float(0.5)
-          .op(b"\x87").reduce().stop(),
-          "calls colorsys.rgb_to_hsv (deny-listed by tests/fixtures/policy-test.toml)", True),
+        f(
+            "pickle/malformed_name.pkl",
+            lambda: p4(2).global_("builtins", "print len").stop(),
+            "global name containing a space",
+            True,
+        ),
+        f(
+            "pickle/inst_p0.pkl",
+            lambda: b"(F0.1\nF0.2\nF0.3\nicolorsys\nrgb_to_hsv\np0\n.",
+            "protocol-0 INST calling colorsys.rgb_to_hsv",
+            True,
+        ),
+        f(
+            "pickle/obj_p1.pkl",
+            lambda: p4().mark().global_("textwrap", "TextWrapper").obj().stop(),
+            "protocol-1 OBJ instantiating textwrap.TextWrapper",
+            True,
+        ),
+        f(
+            "pickle/newobj_ex_p4.pkl",
+            lambda: (
+                p4(4)
+                .stack_global("textwrap", "TextWrapper")
+                .empty_tuple()
+                .empty_dict()
+                .newobj_ex()
+                .stop()
+            ),
+            "NEWOBJ_EX instantiating textwrap.TextWrapper",
+            True,
+        ),
+        f(
+            "pickle/py2_builtin_getattr.pkl",
+            lambda: p4(2).global_("__builtin__", "getattr").stop(),
+            "Python-2 spelling of builtins.getattr",
+            True,
+        ),
+        f(
+            "pickle/colorsys_call.pkl",
+            lambda: (
+                p4(2)
+                .global_("colorsys", "rgb_to_hsv")
+                .float(0.5)
+                .float(0.5)
+                .float(0.5)
+                .op(b"\x87")
+                .reduce()
+                .stop()
+            ),
+            "calls colorsys.rgb_to_hsv (deny-listed by tests/fixtures/policy-test.toml)",
+            True,
+        ),
         f("pickle/legacy_torch.pt", legacy_torch_file, "legacy (non-zip) torch.save layout"),
         # ---- torch zip archives
-        f("torch/benign_state_dict.pt", lambda: torch_zip(torch_data_pkl()),
-          "torch.save-shaped archive"),
-        f("torch/print_in_data_pkl.pt", lambda: torch_zip(print_pickle()),
-          "archive whose data.pkl calls print", True),
-        f("torch/missing_storage.pt",
-          lambda: torch_zip(torch_data_pkl("7", ["../escape"]), storages=()),
-          "persistent ids referencing absent and path-like records"),
-        f("torch/torchscript.pt",
-          lambda: torch_zip(torch_data_pkl(), extra=[
-              ("archive/code/__torch__.py", b"def forward(self, x):\n    return x\n"),
-              ("archive/constants.pkl", PickleAsm(2).empty_tuple().stop())]),
-          "TorchScript archive with code/"),
+        f(
+            "torch/benign_state_dict.pt",
+            lambda: torch_zip(torch_data_pkl()),
+            "torch.save-shaped archive",
+        ),
+        f(
+            "torch/print_in_data_pkl.pt",
+            lambda: torch_zip(print_pickle()),
+            "archive whose data.pkl calls print",
+            True,
+        ),
+        f(
+            "torch/missing_storage.pt",
+            lambda: torch_zip(torch_data_pkl("7", ["../escape"]), storages=()),
+            "persistent ids referencing absent and path-like records",
+        ),
+        f(
+            "torch/torchscript.pt",
+            lambda: torch_zip(
+                torch_data_pkl(),
+                extra=[
+                    ("archive/code/__torch__.py", b"def forward(self, x):\n    return x\n"),
+                    ("archive/constants.pkl", PickleAsm(2).empty_tuple().stop()),
+                ],
+            ),
+            "TorchScript archive with code/",
+        ),
         # ---- generic zips
-        f("zip/hostile_layout.zip",
-          lambda: _zip([("../escape.txt", b"x"), ("dup.txt", b"a"), ("dup.txt", b"b"),
-                        ("link", b"target", {"mode": 0o120777}), ("payload.so", b"\x7fELF")]),
-          "zip-slip, duplicate, symlink and native-library members", True),
-        f("zip/bomb.zip",
-          lambda: _zip([("zeros.bin", b"\x00" * (20 * 1024 * 1024),
-                         {"compress": zipfile.ZIP_DEFLATED})]),
-          "20 MiB of zeros deflated to ~20 KiB"),
-        f("zip/encrypted.zip",
-          lambda: set_encrypted_flag(_zip([("secret.pkl", benign_pickle())])),
-          "member flagged as encrypted"),
-        f("zip/nested_npy.zip",
-          lambda: _zip([("inner/objects.npy", npy("|O", (1,), print_pickle()))]),
-          "object .npy holding a print pickle inside a generic zip", True),
+        f(
+            "zip/hostile_layout.zip",
+            lambda: _zip(
+                [
+                    ("../escape.txt", b"x"),
+                    ("dup.txt", b"a"),
+                    ("dup.txt", b"b"),
+                    ("link", b"target", {"mode": 0o120777}),
+                    ("payload.so", b"\x7fELF"),
+                ]
+            ),
+            "zip-slip, duplicate, symlink and native-library members",
+            True,
+        ),
+        f(
+            "zip/bomb.zip",
+            lambda: _zip(
+                [("zeros.bin", b"\x00" * (20 * 1024 * 1024), {"compress": zipfile.ZIP_DEFLATED})]
+            ),
+            "20 MiB of zeros deflated to ~20 KiB",
+        ),
+        f(
+            "zip/encrypted.zip",
+            lambda: set_encrypted_flag(_zip([("secret.pkl", benign_pickle())])),
+            "member flagged as encrypted",
+        ),
+        f(
+            "zip/nested_npy.zip",
+            lambda: _zip([("inner/objects.npy", npy("|O", (1,), print_pickle()))]),
+            "object .npy holding a print pickle inside a generic zip",
+            True,
+        ),
         f("zip/not_really.zip", lambda: b"PK\x03\x04" + b"\x00" * 40, "corrupt zip"),
         # ---- numpy
         f("npy/float32.npy", lambda: npy("<f4", (4,), _f32(1, 2, 3, 4)), "plain float array"),
-        f("npy/object_strings.npy",
-          lambda: npy("|O", (2,), object_array_pickle(["alpha", "beta"])),
-          "object array of strings"),
-        f("npy/object_print.npy", lambda: npy("|O", (1,), print_pickle()),
-          "object array whose pickle calls print", True),
-        f("npy/bad_header.npy", lambda: npy("", (), b"", header="__import__('os')"),
-          "header that is not a literal"),
-        f("npy/arrays.npz",
-          lambda: _zip([("a.npy", npy("<f4", (4,), _f32(1, 2, 3, 4))),
-                        ("b.npy", npy("<f4", (2,), _f32(5, 6)))]),
-          "npz with two plain arrays"),
+        f(
+            "npy/object_strings.npy",
+            lambda: npy("|O", (2,), object_array_pickle(["alpha", "beta"])),
+            "object array of strings",
+        ),
+        f(
+            "npy/object_print.npy",
+            lambda: npy("|O", (1,), print_pickle()),
+            "object array whose pickle calls print",
+            True,
+        ),
+        f(
+            "npy/bad_header.npy",
+            lambda: npy("", (), b"", header="__import__('os')"),
+            "header that is not a literal",
+        ),
+        f(
+            "npy/arrays.npz",
+            lambda: _zip(
+                [
+                    ("a.npy", npy("<f4", (4,), _f32(1, 2, 3, 4))),
+                    ("b.npy", npy("<f4", (2,), _f32(5, 6))),
+                ]
+            ),
+            "npz with two plain arrays",
+        ),
         # ---- safetensors
-        f("safetensors/valid.safetensors",
-          lambda: safetensors({"__metadata__": {"format": "pt"},
-                               "a": {"dtype": "F32", "shape": [2, 2], "data_offsets": [0, 16]},
-                               "b": {"dtype": "I8", "shape": [4], "data_offsets": [16, 20]}},
-                              _f32(1, 2, 3, 4) + b"\x01\x02\x03\x04"),
-          "two tensors tiling the buffer"),
-        f("safetensors/header_too_large.safetensors",
-          lambda: struct.pack("<Q", 200 * 1024**2) + b"{}", "length prefix of 200 MB"),
-        f("safetensors/header_past_eof.safetensors",
-          lambda: safetensors({"a": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}},
-                              _f32(1), length=4096),
-          "length prefix beyond the file"),
-        f("safetensors/not_json.safetensors", lambda: safetensors("{not json", b""),
-          "header is not JSON"),
-        f("safetensors/bad_dtype.safetensors",
-          lambda: safetensors({"a": {"dtype": "F31", "shape": [1], "data_offsets": [0, 4]}},
-                              _f32(1)),
-          "unknown dtype"),
-        f("safetensors/bad_shape.safetensors",
-          lambda: safetensors({"a": {"dtype": "F32", "shape": [-1], "data_offsets": [0, 4]}},
-                              _f32(1)),
-          "negative dimension"),
-        f("safetensors/size_mismatch.safetensors",
-          lambda: safetensors({"a": {"dtype": "F32", "shape": [3], "data_offsets": [0, 8]}},
-                              _f32(1, 2)),
-          "range does not match shape x dtype"),
-        f("safetensors/overlap.safetensors",
-          lambda: safetensors({"a": {"dtype": "F32", "shape": [2], "data_offsets": [0, 8]},
-                               "b": {"dtype": "F32", "shape": [2], "data_offsets": [4, 12]}},
-                              _f32(1, 2, 3)),
-          "two tensors share bytes"),
-        f("safetensors/gap.safetensors",
-          lambda: safetensors({"a": {"dtype": "F32", "shape": [1], "data_offsets": [4, 8]}},
-                              _f32(1, 2)),
-          "unreferenced bytes before the first tensor"),
-        f("safetensors/duplicate_key.safetensors",
-          lambda: safetensors('{"a":{"dtype":"F32","shape":[1],"data_offsets":[0,4]},'
-                              '"a":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}}', _f32(1)),
-          "tensor name repeated in the JSON header"),
-        f("safetensors/bad_metadata.safetensors",
-          lambda: safetensors({"__metadata__": {"epoch": 3},
-                               "a": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}},
-                              _f32(1)),
-          "non-string metadata value"),
-        f("safetensors/appended_payload.safetensors",
-          lambda: safetensors({"a": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}},
-                              _f32(1) + b"extra bytes after the last tensor"),
-          "bytes appended after the tensors"),
-        f("safetensors/pickle_in_disguise.safetensors", print_pickle,
-          "a print pickle with a .safetensors name", True),
-        f("safetensors/zip_polyglot.safetensors",
-          lambda: safetensors({"a": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}},
-                              _f32(1)) + _zip([("data.pkl", print_pickle())]),
-          "safetensors file with a zip archive appended", True),
+        f(
+            "safetensors/valid.safetensors",
+            lambda: safetensors(
+                {
+                    "__metadata__": {"format": "pt"},
+                    "a": {"dtype": "F32", "shape": [2, 2], "data_offsets": [0, 16]},
+                    "b": {"dtype": "I8", "shape": [4], "data_offsets": [16, 20]},
+                },
+                _f32(1, 2, 3, 4) + b"\x01\x02\x03\x04",
+            ),
+            "two tensors tiling the buffer",
+        ),
+        f(
+            "safetensors/header_too_large.safetensors",
+            lambda: struct.pack("<Q", 200 * 1024**2) + b"{}",
+            "length prefix of 200 MB",
+        ),
+        f(
+            "safetensors/header_past_eof.safetensors",
+            lambda: safetensors(
+                {"a": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}}, _f32(1), length=4096
+            ),
+            "length prefix beyond the file",
+        ),
+        f(
+            "safetensors/not_json.safetensors",
+            lambda: safetensors("{not json", b""),
+            "header is not JSON",
+        ),
+        f(
+            "safetensors/bad_dtype.safetensors",
+            lambda: safetensors(
+                {"a": {"dtype": "F31", "shape": [1], "data_offsets": [0, 4]}}, _f32(1)
+            ),
+            "unknown dtype",
+        ),
+        f(
+            "safetensors/bad_shape.safetensors",
+            lambda: safetensors(
+                {"a": {"dtype": "F32", "shape": [-1], "data_offsets": [0, 4]}}, _f32(1)
+            ),
+            "negative dimension",
+        ),
+        f(
+            "safetensors/size_mismatch.safetensors",
+            lambda: safetensors(
+                {"a": {"dtype": "F32", "shape": [3], "data_offsets": [0, 8]}}, _f32(1, 2)
+            ),
+            "range does not match shape x dtype",
+        ),
+        f(
+            "safetensors/overlap.safetensors",
+            lambda: safetensors(
+                {
+                    "a": {"dtype": "F32", "shape": [2], "data_offsets": [0, 8]},
+                    "b": {"dtype": "F32", "shape": [2], "data_offsets": [4, 12]},
+                },
+                _f32(1, 2, 3),
+            ),
+            "two tensors share bytes",
+        ),
+        f(
+            "safetensors/gap.safetensors",
+            lambda: safetensors(
+                {"a": {"dtype": "F32", "shape": [1], "data_offsets": [4, 8]}}, _f32(1, 2)
+            ),
+            "unreferenced bytes before the first tensor",
+        ),
+        f(
+            "safetensors/duplicate_key.safetensors",
+            lambda: safetensors(
+                '{"a":{"dtype":"F32","shape":[1],"data_offsets":[0,4]},'
+                '"a":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}}',
+                _f32(1),
+            ),
+            "tensor name repeated in the JSON header",
+        ),
+        f(
+            "safetensors/bad_metadata.safetensors",
+            lambda: safetensors(
+                {
+                    "__metadata__": {"epoch": 3},
+                    "a": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]},
+                },
+                _f32(1),
+            ),
+            "non-string metadata value",
+        ),
+        f(
+            "safetensors/appended_payload.safetensors",
+            lambda: safetensors(
+                {"a": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}},
+                _f32(1) + b"extra bytes after the last tensor",
+            ),
+            "bytes appended after the tensors",
+        ),
+        f(
+            "safetensors/pickle_in_disguise.safetensors",
+            print_pickle,
+            "a print pickle with a .safetensors name",
+            True,
+        ),
+        f(
+            "safetensors/zip_polyglot.safetensors",
+            lambda: (
+                safetensors({"a": {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]}}, _f32(1))
+                + _zip([("data.pkl", print_pickle())])
+            ),
+            "safetensors file with a zip archive appended",
+            True,
+        ),
         # ---- gguf
         f("gguf/valid_v3.gguf", lambda: gguf(gguf_valid()), "F32 and Q8_0 tensors"),
-        f("gguf/valid_v1.gguf",
-          lambda: gguf(gguf_valid(version=1)), "same content in the v1 layout"),
-        f("gguf/valid_big_endian.gguf",
-          lambda: gguf(gguf_valid(big_endian=True)), "big-endian v3 header"),
+        f(
+            "gguf/valid_v1.gguf",
+            lambda: gguf(gguf_valid(version=1)),
+            "same content in the v1 layout",
+        ),
+        f(
+            "gguf/valid_big_endian.gguf",
+            lambda: gguf(gguf_valid(big_endian=True)),
+            "big-endian v3 header",
+        ),
         f("gguf/bad_magic.gguf", lambda: b"GGUX" + gguf(gguf_valid())[4:], "wrong magic"),
         f("gguf/bad_version.gguf", lambda: gguf(gguf_valid(version=9)), "version 9"),
-        f("gguf/huge_counts.gguf",
-          lambda: gguf(GGUFSpec(tensor_count=2**40, kv_count=2**40)),
-          "counts that cannot fit in the file", True),
-        f("gguf/string_oob.gguf",
-          lambda: b"GGUF" + struct.pack("<IQQQ", 3, 0, 1, 0xFFFF) + b"general.name",
-          "key length beyond the file", True),
-        f("gguf/bad_value_type.gguf",
-          lambda: gguf(GGUFSpec(kv=[("general.name", 99, None)])), "value type 99"),
-        f("gguf/duplicate_key.gguf",
-          lambda: gguf(gguf_valid(kv=gguf_basic_kv() + [("general.name", GGUF_STRING, "dup")]))
-          , "general.name twice"),
-        f("gguf/too_many_dims.gguf",
-          lambda: gguf(gguf_valid(tensors=[("t", [1, 1, 1, 1, 4], 0, 0)])),
-          "five dimensions", True),
-        f("gguf/unknown_type.gguf",
-          lambda: gguf(gguf_valid(tensors=[("t", [4], 99, 0)])), "ggml type 99"),
-        f("gguf/tensor_oob.gguf",
-          lambda: gguf(gguf_valid(tensors=[("t", [4096], 0, 0)])),
-          "tensor larger than the file", True),
-        f("gguf/misaligned.gguf",
-          lambda: gguf(gguf_valid(tensors=[("t", [2], 0, 4)])), "offset 4 with alignment 32"),
-        f("gguf/overlap.gguf",
-          lambda: gguf(gguf_valid(tensors=[("a", [4], 0, 0), ("b", [4], 0, 0)])),
-          "two tensors at the same offset"),
-        f("gguf/duplicate_tensor.gguf",
-          lambda: gguf(gguf_valid(tensors=[("t", [4], 0, 0), ("t", [4], 0, 32)])),
-          "tensor name repeated"),
-        f("gguf/block_mismatch.gguf",
-          lambda: gguf(gguf_valid(tensors=[("q", [30], 8, 0)])),
-          "Q8_0 row of 30 elements"),
-        f("gguf/chat_template_dunder.gguf",
-          lambda: gguf(gguf_valid(kv=gguf_basic_kv("{{ ''.__class__.__name__ }}"))),
-          "chat template reaching __class__ (prints a class name)", True),
+        f(
+            "gguf/huge_counts.gguf",
+            lambda: gguf(GGUFSpec(tensor_count=2**40, kv_count=2**40)),
+            "counts that cannot fit in the file",
+            True,
+        ),
+        f(
+            "gguf/string_oob.gguf",
+            lambda: b"GGUF" + struct.pack("<IQQQ", 3, 0, 1, 0xFFFF) + b"general.name",
+            "key length beyond the file",
+            True,
+        ),
+        f(
+            "gguf/bad_value_type.gguf",
+            lambda: gguf(GGUFSpec(kv=[("general.name", 99, None)])),
+            "value type 99",
+        ),
+        f(
+            "gguf/duplicate_key.gguf",
+            lambda: gguf(gguf_valid(kv=[*gguf_basic_kv(), ("general.name", GGUF_STRING, "dup")])),
+            "general.name twice",
+        ),
+        f(
+            "gguf/too_many_dims.gguf",
+            lambda: gguf(gguf_valid(tensors=[("t", [1, 1, 1, 1, 4], 0, 0)])),
+            "five dimensions",
+            True,
+        ),
+        f(
+            "gguf/unknown_type.gguf",
+            lambda: gguf(gguf_valid(tensors=[("t", [4], 99, 0)])),
+            "ggml type 99",
+        ),
+        f(
+            "gguf/tensor_oob.gguf",
+            lambda: gguf(gguf_valid(tensors=[("t", [4096], 0, 0)])),
+            "tensor larger than the file",
+            True,
+        ),
+        f(
+            "gguf/misaligned.gguf",
+            lambda: gguf(gguf_valid(tensors=[("t", [2], 0, 4)])),
+            "offset 4 with alignment 32",
+        ),
+        f(
+            "gguf/overlap.gguf",
+            lambda: gguf(gguf_valid(tensors=[("a", [4], 0, 0), ("b", [4], 0, 0)])),
+            "two tensors at the same offset",
+        ),
+        f(
+            "gguf/duplicate_tensor.gguf",
+            lambda: gguf(gguf_valid(tensors=[("t", [4], 0, 0), ("t", [4], 0, 32)])),
+            "tensor name repeated",
+        ),
+        f(
+            "gguf/block_mismatch.gguf",
+            lambda: gguf(gguf_valid(tensors=[("q", [30], 8, 0)])),
+            "Q8_0 row of 30 elements",
+        ),
+        f(
+            "gguf/chat_template_dunder.gguf",
+            lambda: gguf(gguf_valid(kv=gguf_basic_kv("{{ ''.__class__.__name__ }}"))),
+            "chat template reaching __class__ (prints a class name)",
+            True,
+        ),
         # ---- onnx
-        f("onnx/valid.onnx",
-          lambda: onnx_model(onnx_tensor("w", [2], raw=_f32(1, 2))), "inline initializer"),
-        f("onnx/external_ok/model.onnx",
-          lambda: onnx_model(onnx_tensor("w", [2], external={"location": "weights.bin",
-                                                            "offset": "0", "length": "8"})),
-          "external data next to the model"),
+        f(
+            "onnx/valid.onnx",
+            lambda: onnx_model(onnx_tensor("w", [2], raw=_f32(1, 2))),
+            "inline initializer",
+        ),
+        f(
+            "onnx/external_ok/model.onnx",
+            lambda: onnx_model(
+                onnx_tensor(
+                    "w", [2], external={"location": "weights.bin", "offset": "0", "length": "8"}
+                )
+            ),
+            "external data next to the model",
+        ),
         f("onnx/external_ok/weights.bin", lambda: _f32(1, 2), "external tensor bytes"),
-        f("onnx/absolute_path.onnx",
-          lambda: onnx_model(onnx_tensor("w", [2], external={"location": "/nonexistent/w.bin"})),
-          "absolute external location", True),
-        f("onnx/traversal.onnx",
-          lambda: onnx_model(onnx_tensor("w", [2], external={"location": "../outside.bin"})),
-          "external location with '..'", True),
-        f("onnx/missing_external.onnx",
-          lambda: onnx_model(onnx_tensor("w", [2], external={"location": "absent.bin"})),
-          "external file that does not exist"),
-        f("onnx/bad_range/model.onnx",
-          lambda: onnx_model(onnx_tensor("w", [2], external={"location": "weights.bin",
-                                                            "offset": "64", "length": "8"})),
-          "offset beyond the external file"),
+        f(
+            "onnx/absolute_path.onnx",
+            lambda: onnx_model(onnx_tensor("w", [2], external={"location": "/nonexistent/w.bin"})),
+            "absolute external location",
+            True,
+        ),
+        f(
+            "onnx/traversal.onnx",
+            lambda: onnx_model(onnx_tensor("w", [2], external={"location": "../outside.bin"})),
+            "external location with '..'",
+            True,
+        ),
+        f(
+            "onnx/missing_external.onnx",
+            lambda: onnx_model(onnx_tensor("w", [2], external={"location": "absent.bin"})),
+            "external file that does not exist",
+        ),
+        f(
+            "onnx/bad_range/model.onnx",
+            lambda: onnx_model(
+                onnx_tensor(
+                    "w", [2], external={"location": "weights.bin", "offset": "64", "length": "8"}
+                )
+            ),
+            "offset beyond the external file",
+        ),
         f("onnx/bad_range/weights.bin", lambda: _f32(1, 2), "8-byte external file"),
-        f("onnx/custom_domain.onnx",
-          lambda: onnx_model(onnx_tensor("w", [2], raw=_f32(1, 2)), "FixtureOp",
-                             "org.example.fixture"),
-          "operator from a custom domain"),
+        f(
+            "onnx/custom_domain.onnx",
+            lambda: onnx_model(
+                onnx_tensor("w", [2], raw=_f32(1, 2)), "FixtureOp", "org.example.fixture"
+            ),
+            "operator from a custom domain",
+        ),
         f("onnx/garbage.onnx", lambda: b"\x08\x08\x12\xff\xff\xff\xff\x0f", "truncated protobuf"),
         # ---- keras
-        f("keras/benign.keras", lambda: keras_archive(keras_sequential(dense())),
-          "Sequential with Dense"),
-        f("keras/lambda.keras", lambda: keras_archive(keras_sequential(keras_lambda())),
-          "Keras 3 Lambda layer", True),
-        f("keras/function_print.keras",
-          lambda: keras_archive(keras_sequential(dense(
-              keras_ref("builtins", "function", "print", "function")))),
-          "activation referencing builtins.print", True),
-        f("keras/function_denied.keras",
-          lambda: keras_archive(keras_sequential(dense(
-              keras_ref("os", "function", "getcwd", "function")))),
-          "activation referencing deny-listed os.getcwd", True),
-        f("keras/custom_object.keras",
-          lambda: keras_archive(keras_sequential(keras_ref(
-              "fixture_project.layers", "FancyDense", {"units": 2}, "fixture>FancyDense"))),
-          "custom layer class from a third-party module"),
-        f("keras/allowed_function.keras",
-          lambda: keras_archive(keras_sequential(dense(
-              keras_ref("keras.activations", "function", "relu", "relu")))),
-          "activation referencing keras.activations.relu"),
+        f(
+            "keras/benign.keras",
+            lambda: keras_archive(keras_sequential(dense())),
+            "Sequential with Dense",
+        ),
+        f(
+            "keras/lambda.keras",
+            lambda: keras_archive(keras_sequential(keras_lambda())),
+            "Keras 3 Lambda layer",
+            True,
+        ),
+        f(
+            "keras/function_print.keras",
+            lambda: keras_archive(
+                keras_sequential(dense(keras_ref("builtins", "function", "print", "function")))
+            ),
+            "activation referencing builtins.print",
+            True,
+        ),
+        f(
+            "keras/function_denied.keras",
+            lambda: keras_archive(
+                keras_sequential(dense(keras_ref("os", "function", "getcwd", "function")))
+            ),
+            "activation referencing deny-listed os.getcwd",
+            True,
+        ),
+        f(
+            "keras/custom_object.keras",
+            lambda: keras_archive(
+                keras_sequential(
+                    keras_ref(
+                        "fixture_project.layers", "FancyDense", {"units": 2}, "fixture>FancyDense"
+                    )
+                )
+            ),
+            "custom layer class from a third-party module",
+        ),
+        f(
+            "keras/allowed_function.keras",
+            lambda: keras_archive(
+                keras_sequential(dense(keras_ref("keras.activations", "function", "relu", "relu")))
+            ),
+            "activation referencing keras.activations.relu",
+        ),
         f("keras/bad_config.keras", lambda: keras_archive(b"{not json"), "invalid config.json"),
-        f("keras/legacy_lambda.h5",
-          lambda: legacy_h5({"class_name": "Sequential", "config": {"layers": [
-              {"class_name": "Lambda", "config": {"name": "lambda", "function_type": "lambda",
-                                                  "function": [LAMBDA_CODE, None, None]}}]}}),
-          "synthetic HDF5 with a Keras 2 Lambda config", True),
-        f("keras/preset/config.json",
-          lambda: json.dumps(keras_sequential(keras_lambda()), indent=1).encode(),
-          "KerasHub-style preset config.json with a Lambda", True),
+        f(
+            "keras/legacy_lambda.h5",
+            lambda: legacy_h5(
+                {
+                    "class_name": "Sequential",
+                    "config": {
+                        "layers": [
+                            {
+                                "class_name": "Lambda",
+                                "config": {
+                                    "name": "lambda",
+                                    "function_type": "lambda",
+                                    "function": [LAMBDA_CODE, None, None],
+                                },
+                            }
+                        ]
+                    },
+                }
+            ),
+            "synthetic HDF5 with a Keras 2 Lambda config",
+            True,
+        ),
+        f(
+            "keras/preset/config.json",
+            lambda: json.dumps(keras_sequential(keras_lambda()), indent=1).encode(),
+            "KerasHub-style preset config.json with a Lambda",
+            True,
+        ),
     ]
-    return items
 
 
 FIXTURES_LIST: list[Fixture] = _fixtures()
