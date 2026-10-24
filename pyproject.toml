@@ -59,7 +59,7 @@ known-local-folder = ["conftest", "fixturegen"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "ANN", "PLR", "T20", "PTH", "N802", "PLC0415"]
-"scripts/**" = ["T20", "S310", "PTH"]
+"scripts/**" = ["T20", "S310", "S311", "PTH"]
 "src/picklescope/cli.py" = ["T20"]
 
 [tool.mypy]

@@ -12,6 +12,7 @@ the script; results go to eval/results-bench.json together with platform details
 
 from __future__ import annotations
 
+import functools
 import json
 import pickle
 import platform
@@ -57,7 +58,7 @@ def main() -> int:
         for protocol in (2, 4):
             data = _synthetic(n_items, protocol)
             ops = analyze_pickle(data).op_count
-            seconds = _median_seconds(lambda d=data: analyze_pickle(d))
+            seconds = _median_seconds(functools.partial(analyze_pickle, data))
             row = {
                 "protocol": protocol,
                 "bytes": len(data),
@@ -85,7 +86,7 @@ def main() -> int:
         path = cache / entry["id"]
         if not path.exists():
             continue
-        seconds = _median_seconds(lambda p=path: scan_file(p, hash_file=False))
+        seconds = _median_seconds(functools.partial(scan_file, path, hash_file=False))
         real.append({"id": entry["id"], "bytes": entry["size"], "seconds": round(seconds, 4)})
         print(
             f"real model {entry['id']:<45} {entry['size'] / 1024**2:7.2f} MiB "

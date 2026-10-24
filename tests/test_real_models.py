@@ -8,6 +8,11 @@ from pathlib import Path
 import pytest
 
 from picklescope import Severity, scan_file
+from picklescope.blob import open_buffer
+from picklescope.formats.gguf import scan_gguf
+from picklescope.formats.onnx import scan_onnx
+
+from conftest import LOC, make_ctx
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((ROOT / "eval" / "manifest.json").read_text())["models"]
@@ -34,11 +39,6 @@ def test_real_gguf_parity_with_reference_reader() -> None:
     paths = _cached("gguf")
     if not paths:
         pytest.skip("real models not downloaded (make fetch-models)")
-    from conftest import LOC, make_ctx
-
-    from picklescope.blob import open_buffer
-    from picklescope.formats.gguf import scan_gguf
-
     for path in paths:
         reader = gguf_lib.GGUFReader(str(path))
         with open_buffer(path) as buf:
@@ -53,10 +53,6 @@ def test_real_onnx_parity_with_reference() -> None:
     paths = _cached("onnx")
     if not paths:
         pytest.skip("real models not downloaded (make fetch-models)")
-    from conftest import LOC, make_ctx
-
-    from picklescope.formats.onnx import scan_onnx
-
     for path in paths:
         model = onnx_lib.load(str(path), load_external_data=False)
         summary = scan_onnx(path.read_bytes(), LOC, make_ctx())

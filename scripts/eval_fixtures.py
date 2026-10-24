@@ -58,7 +58,8 @@ def _value(rng: random.Random, depth: int = 0) -> Any:
 def fixture_conformance() -> dict[str, Any]:
     catalogue = json.loads((FIXTURES / "catalogue.json").read_text())
     malicious = {k for k, v in catalogue.items() if v["malicious_pattern"]}
-    detected, missed = [], []
+    detected: list[str] = []
+    missed: list[str] = []
     for rel in sorted(malicious):
         report = scan_file(FIXTURES / rel, display_path=rel, hash_file=False)
         top = report.max_severity
@@ -75,7 +76,7 @@ def fixture_conformance() -> dict[str, Any]:
 def random_benign() -> dict[str, Any]:
     rng = random.Random(SEED)
     flagged = []
-    by_protocol = {p: 0 for p in range(6)}
+    by_protocol = dict.fromkeys(range(6), 0)
     total_bytes = 0
     for index in range(SAMPLES):
         protocol = index % 6
@@ -97,15 +98,15 @@ def random_benign() -> dict[str, Any]:
 
 
 def main() -> int:
+    conf = fixture_conformance()
+    rnd = random_benign()
     result = {
         "picklescope_version": __version__,
-        "fixture_conformance": fixture_conformance(),
-        "random_benign_pickles": random_benign(),
+        "fixture_conformance": conf,
+        "random_benign_pickles": rnd,
     }
     out = ROOT / "eval" / "results-fixtures.json"
     out.write_text(json.dumps(result, indent=2) + "\n")
-    conf = result["fixture_conformance"]
-    rnd = result["random_benign_pickles"]
     print(
         f"malicious-pattern fixtures reported >= high: "
         f"{conf['detected_high_or_critical']}/{conf['malicious_pattern_fixtures']}"
