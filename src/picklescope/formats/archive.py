@@ -34,6 +34,9 @@ _EXECUTABLE_SUFFIXES = frozenset(
 )
 _PICKLE_SUFFIXES = (".pkl", ".pickle", ".debug_pkl")
 _SNIFF_BYTES = 16
+# zipfile raises RuntimeError for some encrypted entries, the others for damaged data
+_READ_ERRORS = (zipfile.BadZipFile, NotImplementedError, OSError, EOFError, ValueError,
+                RuntimeError)  # fmt: skip
 _MAGIC_SNIFFERS: tuple[tuple[bytes, str], ...] = (
     (b"PK\x03\x04", "zip"),
     (b"\x93NUMPY", "npy"),
@@ -128,16 +131,27 @@ def _read_member(
     try:
         with zf.open(info) as handle:
             data = handle.read(limit + 1)
-    except (zipfile.BadZipFile, NotImplementedError, OSError, EOFError, ValueError) as exc:
-        ctx.emit("ZIP205", member, f"cannot read member {info.filename!r}: {exc}")
-        return None
-    except RuntimeError as exc:  # zipfile raises RuntimeError for some encrypted entries
+    except _READ_ERRORS as exc:
         ctx.emit("ZIP205", member, f"cannot read member {info.filename!r}: {exc}")
         return None
     if len(data) > limit:
         ctx.emit("ZIP202", member, f"member {info.filename!r} inflates beyond {limit} bytes")
         return None
     return data
+
+
+def _read_head(
+    zf: zipfile.ZipFile, info: zipfile.ZipInfo, loc: Location, ctx: ScanContext
+) -> bytes | None:
+    """First bytes of a member, for content sniffing (no size-limit findings)."""
+    if info.flag_bits & 0x1 or info.file_size > ctx.limits.max_member_size:
+        return None
+    try:
+        with zf.open(info) as handle:
+            return handle.read(_SNIFF_BYTES)
+    except _READ_ERRORS as exc:
+        ctx.emit("ZIP205", loc.child(info.filename), f"cannot read member {info.filename!r}: {exc}")
+        return None
 
 
 def _sniff(data: bytes) -> str | None:
@@ -220,7 +234,7 @@ def _scan_members(
             and layout.kind == "keras"
         ):
             continue  # weights and assets: data only
-        head = _read_member(zf, info, loc, ctx, min(limit, _SNIFF_BYTES))
+        head = _read_head(zf, info, loc, ctx)
         if head is None:
             continue
         kind = _sniff(head)
@@ -251,7 +265,7 @@ def scan_zip(source: str | IO[bytes] | bytes, loc: Location, ctx: ScanContext) -
     handle: str | IO[bytes] = io.BytesIO(source) if isinstance(source, bytes) else source
     try:
         zf = zipfile.ZipFile(handle)
-    except (zipfile.BadZipFile, OSError, EOFError, ValueError, NotImplementedError) as exc:
+    except _READ_ERRORS as exc:
         ctx.emit("ZIP205", loc, f"cannot open zip archive: {exc}")
         return "zip"
     with zf:
@@ -266,6 +280,4 @@ def scan_zip(source: str | IO[bytes] | bytes, loc: Location, ctx: ScanContext) -
                     ctx.scan_nested(data, loc.child(name), name)
         else:
             _scan_members(zf, layout, loc, ctx)
-        if layout.kind == "keras" and "config.json" not in layout.members:
-            ctx.emit("KR604", loc, "Keras archive has no config.json")
     return layout.kind
