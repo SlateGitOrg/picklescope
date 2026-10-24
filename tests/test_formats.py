@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import struct
 import zipfile
@@ -10,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from picklescope import scan_bytes
 from picklescope.findings import Severity
 from picklescope.formats import archive, keras
 from picklescope.formats import gguf as gguf_scan
@@ -25,10 +27,12 @@ from fixturegen import (
     GGUF_STRING,
     GGUFSpec,
     _zip,
+    dense,
     gguf,
     gguf_basic_kv,
     gguf_valid,
     keras_archive,
+    keras_lambda,
     keras_ref,
     keras_sequential,
     npy,
@@ -395,6 +399,53 @@ def test_zip_sniffs_pickles_and_nested_formats_by_content() -> None:
 def test_keras_archive_without_config_is_generic_zip() -> None:
     blob = _zip([("metadata.json", b"{}"), ("model.weights.h5", b"\x89HDF\r\n\x1a\n")])
     assert archive.scan_zip(blob, LOC, make_ctx()) == "zip"
+
+
+def _json(value: object) -> bytes:
+    return json.dumps(value).encode()
+
+
+def test_keras_archive_with_only_config_json_is_scanned() -> None:
+    # Keras 3 saving_lib deserialises config.json before it looks for any weights file.
+    config = keras_sequential(dense(keras_ref("os", "function", "getcwd", "function")))
+    ctx = make_ctx()
+    assert archive.scan_zip(_zip([("config.json", _json(config))]), LOC, ctx) == "keras"
+    assert "KR601" in rules_of(ctx)
+
+
+def test_keras_archive_with_npz_weights_is_scanned() -> None:
+    config = keras_sequential(keras_lambda())
+    blob = _zip([("config.json", _json(config)), ("model.weights.npz", _zip([]))])
+    assert archive.classify(zipfile.ZipFile(io.BytesIO(blob)).infolist()).kind == "keras"
+    ctx = make_ctx()
+    assert archive.scan_zip(blob, LOC, ctx) == "keras"
+    assert "KR600" in rules_of(ctx)
+
+
+def test_keras_extension_forces_keras_layout() -> None:
+    blob = _zip([("config.json", b"{not json")])
+    ctx = make_ctx()
+    assert archive.scan_zip(blob, LOC, ctx, "model.keras") == "keras"
+    assert rules_of(ctx) == {"KR604"}
+    ctx = make_ctx()
+    assert archive.scan_zip(blob, LOC, ctx, "bundle.zip") == "zip"
+    assert rules_of(ctx) == set()
+
+
+def test_non_keras_config_json_keeps_generic_layout() -> None:
+    blob = _zip([("config.json", _json({"model_type": "bert", "hidden_size": 4}))])
+    ctx = make_ctx()
+    assert archive.scan_zip(blob, LOC, ctx) == "zip"
+    assert rules_of(ctx) == set()
+    nested = _zip([("sub/config.json", _json(keras_sequential(keras_lambda())))])
+    assert archive.scan_zip(nested, LOC, make_ctx()) == "zip"  # loader reads the root only
+
+
+def test_keras_layout_by_content_through_scan_bytes() -> None:
+    config = keras_sequential(dense(keras_ref("os", "function", "getcwd", "function")))
+    report = scan_bytes(_zip([("config.json", _json(config))]), "bundle.zip")
+    assert report.format == "zip:keras"
+    assert "KR601" in rules_of(report)
 
 
 @pytest.mark.parametrize("payload_first", [True, False])

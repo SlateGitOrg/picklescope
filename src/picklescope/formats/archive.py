@@ -9,6 +9,7 @@ archives. Tensor storage members are never decompressed.
 from __future__ import annotations
 
 import io
+import json
 import logging
 import re
 import stat
@@ -34,6 +35,8 @@ _EXECUTABLE_SUFFIXES = frozenset(
 )
 _PICKLE_SUFFIXES = (".pkl", ".pickle", ".debug_pkl")
 _SNIFF_BYTES = 16
+# Keras 3 saving_lib reads config.json first, then whichever weights store is present
+_KERAS_MARKERS = frozenset({"metadata.json", "model.weights.h5", "model.weights.npz"})
 # zipfile raises RuntimeError for some encrypted entries, the others for damaged data
 _READ_ERRORS = (zipfile.BadZipFile, NotImplementedError, OSError, EOFError, ValueError,
                 RuntimeError)  # fmt: skip
@@ -118,8 +121,14 @@ def _structural_checks(infos: list[zipfile.ZipInfo], loc: Location, ctx: ScanCon
             )
 
 
-def classify(infos: Iterable[zipfile.ZipInfo]) -> ArchiveLayout:
-    """Recognise the archive flavour from member names."""
+def classify(infos: Iterable[zipfile.ZipInfo], filename: str | None = None) -> ArchiveLayout:
+    """Recognise the archive flavour from member names and, for Keras, the file name.
+
+    A root ``config.json`` next to a Keras marker, or in a file named ``*.keras``, is a
+    Keras archive. :func:`scan_zip` also promotes a generic zip whose root
+    ``config.json`` parses as a Keras object, since Keras loads that file before it
+    looks for any weights.
+    """
     entries = list(infos)
     names = frozenset(info.filename for info in entries)
     for name in names:
@@ -130,7 +139,8 @@ def classify(infos: Iterable[zipfile.ZipInfo]) -> ArchiveLayout:
             if kind == "torch" and path.name == "constants.pkl":
                 continue
             return ArchiveLayout(kind, prefix, entries, names)
-    if "config.json" in names and ({"metadata.json", "model.weights.h5"} & names):
+    keras_name = filename is not None and PurePosixPath(filename).suffix.lower() == ".keras"
+    if "config.json" in names and (keras_name or _KERAS_MARKERS & names):
         return ArchiveLayout("keras", None, entries, names)
     if names and all(n.endswith(".npy") for n in names if not n.endswith("/")):
         return ArchiveLayout("npz", None, entries, names)
@@ -166,6 +176,21 @@ def _read_head(
     except _READ_ERRORS as exc:
         ctx.emit("ZIP205", member, f"cannot read member {info.filename!r}: {exc}")
         return None
+
+
+def _is_keras_config(zf: zipfile.ZipFile, info: zipfile.ZipInfo, ctx: ScanContext) -> bool:
+    """Quietly read a root ``config.json`` and report whether it is a Keras object.
+    Read errors are left for the member scan to report."""
+    if info.flag_bits & 0x1 or info.file_size > ctx.limits.max_member_size:
+        return False
+    try:
+        with zf.open(info) as handle:
+            data = handle.read(ctx.limits.max_member_size + 1)
+        if len(data) > ctx.limits.max_member_size:
+            return False
+        return keras.looks_like_keras_object(json.loads(data.decode("utf-8")))
+    except (*_READ_ERRORS, UnicodeDecodeError, RecursionError):  # JSONDecodeError is a ValueError
+        return False
 
 
 def _sniff(data: bytes) -> str | None:
@@ -270,8 +295,13 @@ def _scan_members(
         )
 
 
-def scan_zip(source: str | IO[bytes] | bytes, loc: Location, ctx: ScanContext) -> str:
+def scan_zip(
+    source: str | IO[bytes] | bytes, loc: Location, ctx: ScanContext, filename: str | None = None
+) -> str:
     """Scan a zip archive given as a path, a binary file object or raw bytes.
+
+    ``filename`` (the file or member name, when known) lets a ``.keras`` extension
+    select the Keras layout.
 
     Returns the detected layout (``torch``, ``torchscript``, ``keras``, ``npz`` or
     ``zip``), or ``zip`` when the archive cannot be opened.
@@ -285,7 +315,11 @@ def scan_zip(source: str | IO[bytes] | bytes, loc: Location, ctx: ScanContext) -
     with zf:
         infos = zf.infolist()
         _structural_checks(infos, loc, ctx)
-        layout = classify(infos)
+        layout = classify(infos, filename)
+        if layout.kind == "zip" and any(
+            info.filename == "config.json" and _is_keras_config(zf, info, ctx) for info in infos
+        ):
+            layout.kind = "keras"
         log.debug("%s: zip layout %s (%d members)", loc.display(), layout.kind, len(infos))
         if layout.kind == "npz":
             for name, label, info in layout.labelled():

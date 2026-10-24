@@ -122,10 +122,15 @@ persistent ids allowed.
 `archive.scan_zip` opens the central directory with `zipfile` (members are only
 decompressed on demand, through a bounded `read(limit + 1)`). Structural checks run on
 every entry: zip-slip names, duplicates, symlink mode bits, the encryption flag, and
-declared size / compression ratio. Classification by member names:
+declared size / compression ratio. The scan iterates the full `infolist()`, so every
+copy of a duplicated name is read (findings in the k-th copy are located at
+`name#k`): which copy a loader picks is implementation defined. Classification:
 
 * `<prefix>/data.pkl` -> PyTorch; with `<prefix>/code/` -> TorchScript,
-* `config.json` plus `metadata.json` or `model.weights.h5` -> Keras v3,
+* root `config.json` plus `metadata.json`, `model.weights.h5` or `model.weights.npz`,
+  or in a file named `*.keras`, or whose JSON is a Keras object (`class_name` +
+  `config`) -> Keras v3. Keras parses `config.json` before it looks for weights, so
+  no marker file is required for the config to be dangerous,
 * only `*.npy` members -> `.npz`,
 * otherwise a generic zip, whose members are sniffed (pickle prologue, zip, npy, GGUF
   magic) and dispatched recursively up to `max_nesting`.

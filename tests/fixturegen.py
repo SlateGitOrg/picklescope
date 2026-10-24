@@ -1056,6 +1056,34 @@ def _fixtures() -> list[Fixture]:
         ),
         f("keras/bad_config.keras", lambda: keras_archive(b"{not json"), "invalid config.json"),
         f(
+            "keras/config_only.keras",
+            lambda: _zip(
+                [
+                    (
+                        "config.json",
+                        json.dumps(
+                            keras_sequential(
+                                dense(keras_ref("os", "function", "getcwd", "function"))
+                            )
+                        ).encode(),
+                    )
+                ]
+            ),
+            "archive holding only config.json, activation referencing deny-listed os.getcwd",
+            True,
+        ),
+        f(
+            "keras/lambda_npz_weights.keras",
+            lambda: _zip(
+                [
+                    ("config.json", json.dumps(keras_sequential(keras_lambda())).encode()),
+                    ("model.weights.npz", _zip([])),
+                ]
+            ),
+            "Keras 3 Lambda layer with an .npz weights store and no metadata.json",
+            True,
+        ),
+        f(
             "keras/legacy_lambda.h5",
             lambda: legacy_h5(
                 {

@@ -163,6 +163,17 @@ def scan_keras_config(
     return True
 
 
+def looks_like_keras_object(config: Any) -> bool:
+    """True for anything ``keras.saving.deserialize_keras_object`` accepts as a
+    serialized object: a dict with a string ``class_name`` and a ``config`` key
+    (``module`` is optional for legacy and built-in names)."""
+    return (
+        isinstance(config, dict)
+        and isinstance(config.get("class_name"), str)
+        and ("config" in config)
+    )
+
+
 def looks_like_keras_config(config: Any) -> bool:
     """True for a top-level Keras object: has module, class_name and config keys."""
     return isinstance(config, dict) and {"module", "class_name", "config"} <= set(config)

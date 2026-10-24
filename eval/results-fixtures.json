@@ -1,8 +1,8 @@
 {
   "picklescope_version": "0.1.0",
   "fixture_conformance": {
-    "malicious_pattern_fixtures": 35,
-    "detected_high_or_critical": 35,
+    "malicious_pattern_fixtures": 38,
+    "detected_high_or_critical": 38,
     "missed": [],
     "other_fixtures": 53
   },

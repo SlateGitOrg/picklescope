@@ -253,7 +253,7 @@ OrderedDict) at protocols 0-5. None of these were used during development.
 
 ### Synthetic corpus conformance
 
-The same script checks the 90-file fixture corpus. **35/35 "malicious-pattern"
+The same script checks the 93-file fixture corpus. **38/38 "malicious-pattern"
 fixtures are reported at high or critical**, and every other fixture produces exactly
 its expected rule set (`tests/test_fixtures.py`). The scanner was developed against
 this corpus, so it is a conformance check and not an unbiased detection rate.
@@ -277,7 +277,7 @@ them as indicative:
 |---|---|
 | Pickle analyser, protocol 2, 6.06 MiB / 1.9 M opcodes | 2.57 MiB/s, 0.81 M opcodes/s |
 | Pickle analyser, protocol 4, 4.63 MiB / 1.9 M opcodes | 1.97 MiB/s, 0.81 M opcodes/s |
-| Full scan of the 90-file fixture corpus | 17.9 ms |
+| Full scan of the fixture corpus (90 files, measured before fix round 1 added 3) | 17.9 ms |
 | `bert-tiny/pytorch_model.bin` (16.9 MiB, storages skipped) | 3.4 ms |
 | `stories15M-q4_0.gguf` (18.2 MiB) | 31.0 ms |
 

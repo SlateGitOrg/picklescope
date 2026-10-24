@@ -30,13 +30,14 @@ def _dispatch(
     ctx: ScanContext,
     base_dir: Path | None,
     zip_source: str | bytes,
+    name: str,
 ) -> str:
     """Run the scanner for ``fmt``; returns the refined format name (zip layouts
-    become ``zip:torch``, ``zip:keras`` ...)."""
+    become ``zip:torch``, ``zip:keras`` ...). ``name`` is the file or member name."""
     if fmt == "pickle":
         scan_pickle(buf, loc, ctx, "plain")
     elif fmt == "zip":
-        return f"zip:{archive.scan_zip(zip_source, loc, ctx)}"
+        return f"zip:{archive.scan_zip(zip_source, loc, ctx, name)}"
     elif fmt == "safetensors":
         safetensors.scan_safetensors(buf, loc, ctx)
     elif fmt == "gguf":
@@ -54,7 +55,7 @@ def _dispatch(
 
 def _scan_nested(data: bytes, loc: Location, ctx: ScanContext, hint: str) -> str:
     """Dispatcher for blobs found inside other files (zip members, npz entries)."""
-    return _dispatch(detect_format(data, hint), data, loc, ctx, None, data)
+    return _dispatch(detect_format(data, hint), data, loc, ctx, None, data, hint)
 
 
 def _sha256(path: Path) -> str:
@@ -107,7 +108,7 @@ def scan_file(
             if fmt in ("unknown", "empty"):
                 report.skipped_reason = f"{fmt} format"
             else:
-                report.format = _dispatch(fmt, buf, loc, ctx, file.parent, str(file))
+                report.format = _dispatch(fmt, buf, loc, ctx, file.parent, str(file), file.name)
     except OSError as exc:
         ctx.emit("GEN901", loc, f"I/O error while scanning: {exc.strerror or exc}")
     except Exception as exc:
@@ -136,7 +137,7 @@ def scan_bytes(
         report.skipped_reason = f"{fmt} format"
     else:
         try:
-            report.format = _dispatch(fmt, data, loc, ctx, None, data)
+            report.format = _dispatch(fmt, data, loc, ctx, None, data, name)
         except Exception as exc:
             log.exception("internal error scanning %s", name)
             ctx.emit("GEN901", loc, f"internal error ({type(exc).__name__}): {exc}")

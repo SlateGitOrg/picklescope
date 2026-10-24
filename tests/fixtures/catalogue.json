@@ -79,6 +79,10 @@
     "description": "Sequential with Dense",
     "malicious_pattern": false
   },
+  "keras/config_only.keras": {
+    "description": "archive holding only config.json, activation referencing deny-listed os.getcwd",
+    "malicious_pattern": true
+  },
   "keras/custom_object.keras": {
     "description": "custom layer class from a third-party module",
     "malicious_pattern": false
@@ -93,6 +97,10 @@
   },
   "keras/lambda.keras": {
     "description": "Keras 3 Lambda layer",
+    "malicious_pattern": true
+  },
+  "keras/lambda_npz_weights.keras": {
+    "description": "Keras 3 Lambda layer with an .npz weights store and no metadata.json",
     "malicious_pattern": true
   },
   "keras/legacy_lambda.h5": {
