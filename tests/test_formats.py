@@ -211,7 +211,7 @@ def test_onnx_fixtures_parse_with_reference(rel: str) -> None:
     assert summary is not None
     assert summary.ir_version == model.ir_version
     assert summary.node_count == len(model.graph.node)
-    assert summary.initializer_count == len(model.graph.initializer)
+    assert summary.tensor_count == len(model.graph.initializer)
 
 
 def test_onnx_external_symlink_escape(tmp_path: Path) -> None:

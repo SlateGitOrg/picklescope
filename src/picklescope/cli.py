@@ -172,9 +172,13 @@ def _disasm_bytes(data: bytes, policy: Policy) -> str:
             notes[dyn.offset] = "dynamic import (operands not constant)"
         for call in analysis.calls:
             callee = call.callee
-            target = describe(callee) if isinstance(callee, (GlobalValue, CallValue)) else "?"
+            if isinstance(callee, CallValue):
+                note = f"call the result of {describe(callee)}"
+            elif isinstance(callee, GlobalValue):
+                note = f"call {describe(callee)}"
+            else:
+                note = f"call {describe(callee)} (not an imported name)"
             existing = notes.get(call.offset)
-            note = f"call {target}"
             notes[call.offset] = f"{existing}; {note}" if existing else note
         out.append(f"--- pickle at byte {pos} (protocol {analysis.protocol}) ---")
         out.append(format_ops(analysis.ops or [], notes))

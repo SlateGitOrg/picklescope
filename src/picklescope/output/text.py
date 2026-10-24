@@ -37,10 +37,9 @@ def _file_block(file: FileReport, min_severity: Severity, color: bool, imports: 
         label = f"{item.severity.name:<8}"
         if color:
             label = f"{_COLORS[item.severity]}{label}{_RESET}"
-        where = "!".join(item.location.members)
+        where = f" [{'!'.join(item.location.members)}]" if item.location.members else ""
         if item.location.offset is not None:
-            where += f"@{item.location.offset}"
-        where = f" [{where}]" if where else ""
+            where += f" @{item.location.offset}"
         lines.append(f"  {label} {item.rule_id}{where} {item.message}")
     if imports and file.imports:
         listed = ", ".join(

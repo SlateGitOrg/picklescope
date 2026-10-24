@@ -80,7 +80,7 @@ class ONNXSummary:
     producer: str | None = None
     opsets: dict[str, int] = field(default_factory=dict)
     node_count: int = 0
-    initializer_count: int = 0
+    tensor_count: int = 0
     external: list[ExternalRef] = field(default_factory=list)
     custom_ops: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     function_domains: set[str] = field(default_factory=set)
@@ -121,7 +121,7 @@ def _parse_tensor(buf: Buffer, span: tuple[int, int], summary: ONNXSummary) -> N
         elif number == 14 and wire == VARINT:
             assert isinstance(value, int)
             location_flag = value
-    summary.initializer_count += 1
+    summary.tensor_count += 1
     if entries or location_flag == 1:
         summary.external.append(
             ExternalRef(
@@ -327,11 +327,11 @@ def scan_onnx(
             op_types=sorted(ops),
         )
     log.debug(
-        "%s: onnx ir=%s nodes=%d initializers=%d external=%d",
+        "%s: onnx ir=%s nodes=%d tensors=%d external=%d",
         loc.display(),
         summary.ir_version,
         summary.node_count,
-        summary.initializer_count,
+        summary.tensor_count,
         len(summary.external),
     )
     return summary
