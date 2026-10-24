@@ -15,6 +15,8 @@ from picklescope.pkl.opcodes import OPCODES
 HDF5_MAGIC = b"\x89HDF\r\n\x1a\n"
 KNOWN_FORMATS = ("zip", "gguf", "npy", "hdf5", "safetensors", "pickle", "onnx", "keras-config")
 
+EXTENSION_FALLBACK = {".safetensors": "safetensors", ".gguf": "gguf", ".npy": "npy",
+                      ".onnx": "onnx"}  # fmt: skip
 PICKLE_EXTENSIONS = frozenset({".pkl", ".pickle", ".pt", ".pth", ".bin", ".ckpt", ".dat"})
 
 # extension -> formats it may legitimately contain, and whether "unknown" content is
@@ -76,7 +78,9 @@ def detect_format(buf: Buffer, name: str = "") -> str:
         return "pickle"
     if suffix == ".json" and _json_keras(buf):
         return "keras-config"
-    return "unknown"
+    # A strongly typed extension routes damaged content to its validator, which explains
+    # precisely what is wrong (e.g. a safetensors length prefix past the end of file).
+    return EXTENSION_FALLBACK.get(suffix, "unknown")
 
 
 def extension_mismatch(name: str, detected: str) -> str | None:

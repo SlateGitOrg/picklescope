@@ -111,6 +111,7 @@ def walk_config(config: Any, loc: Location, ctx: ScanContext, origin: str) -> in
     lambdas = 0
     policy = ctx.policy.with_profiles(["keras"])
     stack: list[tuple[Any, str]] = [(config, "$")]
+    lambda_functions: set[int] = set()
     visited = 0
     while stack:
         node, path = stack.pop()
@@ -120,10 +121,11 @@ def walk_config(config: Any, loc: Location, ctx: ScanContext, origin: str) -> in
             break
         if isinstance(node, dict):
             class_name = node.get("class_name")
-            if class_name in ("Lambda", "__lambda__"):
+            if class_name in ("Lambda", "__lambda__") and id(node) not in lambda_functions:
                 lambdas += 1
                 layer_config = node.get("config")
                 layer_config = layer_config if isinstance(layer_config, dict) else {}
+                lambda_functions.add(id(layer_config.get("function")))
                 bytecode = class_name == "__lambda__" or _has_bytecode(
                     layer_config.get("function"), layer_config
                 )
@@ -136,7 +138,7 @@ def walk_config(config: Any, loc: Location, ctx: ScanContext, origin: str) -> in
                     bytecode=bytecode,
                     origin=origin,
                 )
-            elif "module" in node or "registered_name" in node:
+            if "module" in node or "registered_name" in node:
                 _check_reference(node, path, loc, ctx, policy, origin)
             for key, value in node.items():
                 if isinstance(value, (dict, list)):
