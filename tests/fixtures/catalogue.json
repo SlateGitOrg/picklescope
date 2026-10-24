@@ -327,6 +327,10 @@
     "description": "archive whose data.pkl calls print",
     "malicious_pattern": true
   },
+  "torch/shadowed_data_pkl.pt": {
+    "description": "two archive/data.pkl entries; the first calls print, the second is benign",
+    "malicious_pattern": true
+  },
   "torch/torchscript.pt": {
     "description": "TorchScript archive with code/",
     "malicious_pattern": false

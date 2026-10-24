@@ -186,7 +186,7 @@ Absolute names, drive letters or '..' segments let extraction write outside the 
 
 **medium** - Archive contains two members with the same name.
 
-Different readers pick different copies, so a scanner and a loader can see different content.
+Different readers pick different copies, so a scanner and a loader can see different content. Every copy is scanned; findings in the k-th copy are located at `name#k`.
 
 ### ZIP202 decompression-bomb
 

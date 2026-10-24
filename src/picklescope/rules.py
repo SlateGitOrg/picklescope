@@ -183,7 +183,8 @@ _RULES: tuple[Rule, ...] = (
         M,
         "Archive contains two members with the same name.",
         "Different readers pick different copies, so a scanner and a loader can see "
-        "different content.",
+        "different content. Every copy is scanned; findings in the k-th copy are "
+        "located at `name#k`.",
     ),
     _r(
         "ZIP202",

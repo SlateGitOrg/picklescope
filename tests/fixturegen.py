@@ -683,6 +683,12 @@ def _fixtures() -> list[Fixture]:
             True,
         ),
         f(
+            "torch/shadowed_data_pkl.pt",
+            lambda: torch_zip(print_pickle(), extra=[("archive/data.pkl", torch_data_pkl())]),
+            "two archive/data.pkl entries; the first calls print, the second is benign",
+            True,
+        ),
+        f(
             "torch/missing_storage.pt",
             lambda: torch_zip(torch_data_pkl("7", ["../escape"]), storages=()),
             "persistent ids referencing absent and path-like records",

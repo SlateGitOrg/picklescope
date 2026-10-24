@@ -14,7 +14,7 @@ import re
 import stat
 import zipfile
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import IO
@@ -46,9 +46,24 @@ _MAGIC_SNIFFERS: tuple[tuple[bytes, str], ...] = (
 
 @dataclass(slots=True)
 class ArchiveLayout:
+    """Classified archive. ``infos`` keeps every central-directory entry, duplicates
+    included: which copy of a repeated name a loader resolves is implementation
+    defined, so each copy is scanned on its own."""
+
     kind: str  # torch | torchscript | keras | npz | zip
     torch_prefix: str | None = None
-    members: dict[str, zipfile.ZipInfo] = field(default_factory=dict)
+    infos: list[zipfile.ZipInfo] = field(default_factory=list)
+    names: frozenset[str] = frozenset()
+
+    def labelled(self) -> Iterator[tuple[str, str, zipfile.ZipInfo]]:
+        """Yield ``(name, label, info)`` for every entry; ``label`` is the location
+        label, ``name#k`` for the k-th copy of a duplicated name."""
+        counts = Counter(info.filename for info in self.infos)
+        seen: Counter[str] = Counter()
+        for info in self.infos:
+            name = info.filename
+            seen[name] += 1
+            yield name, f"{name}#{seen[name]}" if counts[name] > 1 else name, info
 
 
 def unsafe_member_name(name: str) -> str | None:
@@ -105,8 +120,8 @@ def _structural_checks(infos: list[zipfile.ZipInfo], loc: Location, ctx: ScanCon
 
 def classify(infos: Iterable[zipfile.ZipInfo]) -> ArchiveLayout:
     """Recognise the archive flavour from member names."""
-    members = {info.filename: info for info in infos}
-    names = set(members)
+    entries = list(infos)
+    names = frozenset(info.filename for info in entries)
     for name in names:
         path = PurePosixPath(name)
         if path.name in ("data.pkl", "constants.pkl") and len(path.parts) == 2:
@@ -114,18 +129,17 @@ def classify(infos: Iterable[zipfile.ZipInfo]) -> ArchiveLayout:
             kind = "torchscript" if any(n.startswith(f"{prefix}/code/") for n in names) else "torch"
             if kind == "torch" and path.name == "constants.pkl":
                 continue
-            return ArchiveLayout(kind, prefix, members)
+            return ArchiveLayout(kind, prefix, entries, names)
     if "config.json" in names and ({"metadata.json", "model.weights.h5"} & names):
-        return ArchiveLayout("keras", None, members)
+        return ArchiveLayout("keras", None, entries, names)
     if names and all(n.endswith(".npy") for n in names if not n.endswith("/")):
-        return ArchiveLayout("npz", None, members)
-    return ArchiveLayout("zip", None, members)
+        return ArchiveLayout("npz", None, entries, names)
+    return ArchiveLayout("zip", None, entries, names)
 
 
 def _read_member(
-    zf: zipfile.ZipFile, info: zipfile.ZipInfo, loc: Location, ctx: ScanContext, limit: int
+    zf: zipfile.ZipFile, info: zipfile.ZipInfo, member: Location, ctx: ScanContext, limit: int
 ) -> bytes | None:
-    member = loc.child(info.filename)
     if info.flag_bits & 0x1 or info.file_size > ctx.limits.max_member_size:
         return None
     try:
@@ -141,7 +155,7 @@ def _read_member(
 
 
 def _read_head(
-    zf: zipfile.ZipFile, info: zipfile.ZipInfo, loc: Location, ctx: ScanContext
+    zf: zipfile.ZipFile, info: zipfile.ZipInfo, member: Location, ctx: ScanContext
 ) -> bytes | None:
     """First bytes of a member, for content sniffing (no size-limit findings)."""
     if info.flag_bits & 0x1 or info.file_size > ctx.limits.max_member_size:
@@ -150,7 +164,7 @@ def _read_head(
         with zf.open(info) as handle:
             return handle.read(_SNIFF_BYTES)
     except _READ_ERRORS as exc:
-        ctx.emit("ZIP205", loc.child(info.filename), f"cannot read member {info.filename!r}: {exc}")
+        ctx.emit("ZIP205", member, f"cannot read member {info.filename!r}: {exc}")
         return None
 
 
@@ -188,7 +202,7 @@ def _check_torch_storages(
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", key) or key in (".", ".."):
             ctx.emit("ZIP207", here, f"storage key {key!r} is not a plain record name")
             continue
-        if f"{prefix}/data/{key}" not in layout.members:
+        if f"{prefix}/data/{key}" not in layout.names:
             ctx.emit("ZIP207", here, f"storage key {key!r} has no {prefix}/data/{key} record")
         storage_type = event.pid.items[1] if isinstance(event.pid, TupleValue) else None
         if storage_type is not None and not isinstance(storage_type, GlobalValue):
@@ -200,10 +214,10 @@ def _scan_members(
 ) -> None:
     limit = ctx.limits.max_member_size
     code_members = 0
-    for name, info in layout.members.items():
+    for name, label, info in layout.labelled():
         if name.endswith("/"):
             continue
-        member = loc.child(name)
+        member = loc.child(label)
         suffix = PurePosixPath(name).suffix.lower()
         is_torch = layout.kind in ("torch", "torchscript")
         if is_torch and layout.torch_prefix and name.startswith(f"{layout.torch_prefix}/data/"):
@@ -217,7 +231,7 @@ def _scan_members(
             continue
 
         if name.lower().endswith(_PICKLE_SUFFIXES):
-            data = _read_member(zf, info, loc, ctx, limit)
+            data = _read_member(zf, info, member, ctx, limit)
             if data is None:
                 continue
             result = scan_pickle(data, member, ctx, "torch" if is_torch else "plain")
@@ -225,7 +239,7 @@ def _scan_members(
                 _check_torch_storages(result.persistent_ids, layout, member, ctx)
             continue
         if layout.kind == "keras" and name == "config.json":
-            data = _read_member(zf, info, loc, ctx, limit)
+            data = _read_member(zf, info, member, ctx, limit)
             if data is not None:
                 keras.scan_keras_config(data, member, ctx)
             continue
@@ -234,13 +248,13 @@ def _scan_members(
             and layout.kind == "keras"
         ):
             continue  # weights and assets: data only
-        head = _read_head(zf, info, loc, ctx)
+        head = _read_head(zf, info, member, ctx)
         if head is None:
             continue
         kind = _sniff(head)
         if kind is None:
             continue
-        data = _read_member(zf, info, loc, ctx, limit)
+        data = _read_member(zf, info, member, ctx, limit)
         if data is None:
             continue
         if kind == "pickle":
@@ -274,10 +288,11 @@ def scan_zip(source: str | IO[bytes] | bytes, loc: Location, ctx: ScanContext) -
         layout = classify(infos)
         log.debug("%s: zip layout %s (%d members)", loc.display(), layout.kind, len(infos))
         if layout.kind == "npz":
-            for name, info in layout.members.items():
-                data = _read_member(zf, info, loc, ctx, ctx.limits.max_member_size)
+            for name, label, info in layout.labelled():
+                member = loc.child(label)
+                data = _read_member(zf, info, member, ctx, ctx.limits.max_member_size)
                 if data is not None:
-                    ctx.scan_nested(data, loc.child(name), name)
+                    ctx.scan_nested(data, member, name)
         else:
             _scan_members(zf, layout, loc, ctx)
     return layout.kind

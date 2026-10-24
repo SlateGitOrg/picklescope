@@ -99,6 +99,7 @@ EXPECTED: dict[str, set[str]] = {
     "torch/benign_state_dict.pt": set(),
     "torch/missing_storage.pt": {"ZIP207"},
     "torch/print_in_data_pkl.pt": {"PKL102"},
+    "torch/shadowed_data_pkl.pt": {"PKL102", "ZIP201"},
     "torch/torchscript.pt": {"ZIP206"},
     "zip/bomb.zip": {"ZIP202"},
     "zip/encrypted.zip": {"ZIP203"},

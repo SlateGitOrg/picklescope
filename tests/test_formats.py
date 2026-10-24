@@ -397,6 +397,30 @@ def test_keras_archive_without_config_is_generic_zip() -> None:
     assert archive.scan_zip(blob, LOC, make_ctx()) == "zip"
 
 
+@pytest.mark.parametrize("payload_first", [True, False])
+def test_every_copy_of_a_duplicate_member_is_scanned(payload_first: bool) -> None:
+    copies = [print_pickle(), torch_data_pkl()]
+    if not payload_first:
+        copies.reverse()
+    blob = torch_zip(copies[0], extra=[("archive/data.pkl", copies[1])])
+    ctx = make_ctx()
+    assert archive.scan_zip(blob, LOC, ctx) == "torch"
+    assert {"ZIP201", "PKL102"} <= rules_of(ctx)
+    payload_copy = "#1" if payload_first else "#2"
+    flagged = {f.location.members for f in ctx.findings if f.rule_id == "PKL102"}
+    assert flagged == {(f"archive/data.pkl{payload_copy}",)}
+    assert max(f.severity for f in ctx.findings) >= Severity.HIGH
+
+
+def test_duplicate_npz_entries_are_all_scanned() -> None:
+    plain = npy("<f4", (1,), struct.pack("<f", 1.0))
+    hostile = npy("|O", (1,), print_pickle())
+    blob = _zip([("a.npy", hostile), ("a.npy", plain)])
+    ctx = make_ctx()
+    assert archive.scan_zip(blob, LOC, ctx) == "npz"
+    assert {"ZIP201", "NP700", "PKL102"} <= rules_of(ctx)
+
+
 # --------------------------------------------------------------------------- keras / npy
 
 
