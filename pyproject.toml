@@ -53,8 +53,12 @@ ignore = [
     "ANN401",   # Any is the honest type for parsed JSON
 ]
 
+[tool.ruff.lint.isort]
+known-first-party = ["picklescope"]
+known-local-folder = ["conftest", "fixturegen"]
+
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S", "ANN", "PLR", "T20", "PTH", "N802"]
+"tests/**" = ["S", "ANN", "PLR", "T20", "PTH", "N802", "PLC0415"]
 "scripts/**" = ["T20", "S310", "PTH"]
 "src/picklescope/cli.py" = ["T20"]
 

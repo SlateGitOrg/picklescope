@@ -70,7 +70,7 @@ _RULES: tuple[Rule, ...] = (
         "PKL104",
         "attribute-traversal",
         H,
-        "Imported name walks through a dunder or private attribute chain.",
+        "Imported name walks through a dunder attribute chain.",
         "Protocol 4 find_class resolves dotted names attribute by attribute, so a name such "
         "as 'Foo.__init__.__globals__' reaches arbitrary objects from an allowed module.",
     ),
