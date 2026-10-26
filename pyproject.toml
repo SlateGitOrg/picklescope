@@ -5,7 +5,7 @@ description = "Static scanner for ML model files (pickle, PyTorch, safetensors, 
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "archit2501" }]
+authors = [{ name = "picklescope contributors" }]
 requires-python = ">=3.12"
 dependencies = []
 keywords = ["pickle", "security", "machine-learning", "supply-chain", "sarif", "static-analysis"]

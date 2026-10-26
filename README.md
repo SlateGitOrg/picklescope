@@ -2,6 +2,8 @@
 
 **A static scanner for ML model files that never deserializes them.**
 
+[![CI](https://github.com/SlateGitOrg/picklescope/actions/workflows/ci.yml/badge.svg)](https://github.com/SlateGitOrg/picklescope/actions/workflows/ci.yml)
+
 picklescope inspects PyTorch checkpoints, raw pickles, NumPy arrays, Keras archives,
 safetensors, GGUF and ONNX files *before* anything loads them. It disassembles pickle
 bytecode and replays the unpickler's stack machine over abstract values, so it knows
@@ -95,7 +97,7 @@ interpreter, mark and memo semantics, per-format algorithms and their complexity
 the policy is built and how to extend it is in [docs/ALLOWLIST.md](docs/ALLOWLIST.md).
 The threat model is in [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
-## Quickstart
+## Quick start
 
 Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
 
@@ -127,7 +129,7 @@ if report.exceeds(Severity.HIGH):
 ## Demo
 
 `make demo` runs the CLI over the bundled fixtures, entirely offline. This is an
-excerpt of a real run (complete output in the build report):
+excerpt of a real run:
 
 ```text
 $ picklescope scan --no-hash --show-imports tests/fixtures/torch/benign_state_dict.pt tests/fixtures/torch/print_in_data_pkl.pt
@@ -277,7 +279,7 @@ them as indicative:
 |---|---|
 | Pickle analyser, protocol 2, 6.06 MiB / 1.9 M opcodes | 2.57 MiB/s, 0.81 M opcodes/s |
 | Pickle analyser, protocol 4, 4.63 MiB / 1.9 M opcodes | 1.97 MiB/s, 0.81 M opcodes/s |
-| Full scan of the fixture corpus (90 files, measured before fix round 1 added 3) | 17.9 ms |
+| Full scan of the fixture corpus (90 files) | 17.9 ms |
 | `bert-tiny/pytorch_model.bin` (16.9 MiB, storages skipped) | 3.4 ms |
 | `stories15M-q4_0.gguf` (18.2 MiB) | 31.0 ms |
 
@@ -339,8 +341,6 @@ The full list of rulings is in [DECISIONS.md](DECISIONS.md). The main ones:
   was used during development.
 * **Model-level attacks are out of scope.** Backdoored weights, data poisoning and
   adversarial behaviour cannot be seen by a format scanner.
-* The GitHub Actions workflow is written but has not run, because the repository has
-  not been pushed yet.
 
 ## Roadmap
 
@@ -356,4 +356,4 @@ The full list of rulings is in [DECISIONS.md](DECISIONS.md). The main ones:
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
