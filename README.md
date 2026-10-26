@@ -201,7 +201,7 @@ findings: critical 1, high 5, medium 2, low 0, info 0
 
 $ picklescope scan --no-hash -f sarif -o out/demo.sarif tests/fixtures
 
-out/demo.sarif: 90 artifacts, 86 results, by level {'error': 37, 'note': 3, 'warning': 46}
+out/demo.sarif: 93 artifacts, 90 results, by level {'error': 40, 'note': 3, 'warning': 47}
 ```
 
 ## Evaluation
@@ -272,16 +272,16 @@ this corpus, so it is a conformance check and not an unbiased detection rate.
 ### Benchmarks
 
 `make bench` (`scripts/bench.py`) reports the median of 5 runs. These numbers come
-from macOS arm64, Python 3.12.13, on a machine shared with other build jobs, so treat
+from macOS arm64, Python 3.12.13, on a machine that may be running other jobs, so treat
 them as indicative:
 
 | Workload | Result |
 |---|---|
-| Pickle analyser, protocol 2, 6.06 MiB / 1.9 M opcodes | 2.57 MiB/s, 0.81 M opcodes/s |
-| Pickle analyser, protocol 4, 4.63 MiB / 1.9 M opcodes | 1.97 MiB/s, 0.81 M opcodes/s |
-| Full scan of the fixture corpus (90 files) | 17.9 ms |
-| `bert-tiny/pytorch_model.bin` (16.9 MiB, storages skipped) | 3.4 ms |
-| `stories15M-q4_0.gguf` (18.2 MiB) | 31.0 ms |
+| Pickle analyser, protocol 2, 6.06 MiB / 1.9 M opcodes | 5.07 MiB/s, 1.59 M opcodes/s |
+| Pickle analyser, protocol 4, 4.63 MiB / 1.9 M opcodes | 4.01 MiB/s, 1.65 M opcodes/s |
+| Full scan of the fixture corpus (93 files) | 7.9 ms |
+| `bert-tiny/pytorch_model.bin` (16.9 MiB, storages skipped) | 1.8 ms |
+| `stories15M-q4_0.gguf` (18.2 MiB) | 16.2 ms |
 
 Throughput depends on opcode density, not file size. A real checkpoint's `data.pkl`
 is a tiny fraction of the archive, and tensor storage is never read.
@@ -292,12 +292,12 @@ is a tiny fraction of the archive, and tensor storage is never read.
 $ make check   # ruff format --check, ruff check, mypy --strict, pytest with an 85% coverage gate
 ```
 
-464 tests run when the real models are cached; the 16 real-model tests skip in a
-fresh clone. They cover golden findings for every fixture, a harmless-callable guard
+481 tests (465 run in a fresh clone; the 16 real-model tests skip until
+`make fetch-models`). They cover golden findings for every fixture, a harmless-callable guard
 on the corpus, property-based differential tests against `pickletools`, reference
 parity, SARIF validation against the official OASIS JSON schema, CLI behaviour, and
 fuzzing: random bytes plus 40 mutations of every fixture must never reach an internal
-error. Line and branch coverage is **98.2%** (`make cov`).
+error. Line and branch coverage is **98.1%** (`make cov`).
 
 ## Design decisions
 
