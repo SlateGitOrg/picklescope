@@ -301,7 +301,7 @@ error. Line and branch coverage is **98.1%** (`make cov`).
 
 ## Design decisions
 
-The full list of rulings is in [DECISIONS.md](DECISIONS.md). The main ones:
+The full list of design decisions is in [DECISIONS.md](DECISIONS.md). The main ones:
 
 * The opcode table and disassembler are written from scratch. `pickletools` is used
   only as a test oracle. This gives structured errors, resource limits, and no path
